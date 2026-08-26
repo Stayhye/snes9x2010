@@ -246,6 +246,23 @@ void S9xSetStreamBuffer(uint8_t *buffer, uint64_t size)
 	s9x_stream_buffer_size = size;
 }
 
+#include <stdlib.h>
+
+#ifdef __PS2__
+int posix_memalign(void **memptr, size_t alignment, size_t size)
+{
+   if (!memptr)
+      return -1;
+   
+   // PS2 SDK supports memalign
+   *memptr = memalign(alignment, size);
+   if (!*memptr && size != 0)
+      return -1;
+      
+   return 0;
+}
+#endif
+
 /* Set when the frontend has signalled RETRO_AV_ENABLE_HARD_DISABLE_AUDIO,
    i.e. "you may skip audio work entirely this frame". That also sets
    Settings.HardDisableAudio, so dsp_run() returns at its head, the DSP cursor
