@@ -3744,11 +3744,11 @@ void S9xSetPPU (uint8_t Byte, uint16_t Address)
 						S9xUpdateScreen();
 
 					if (Byte & 0x80)
-						PPU.FixedColourBlue  = Byte & 0x1f;
+						PPU.FixedColourRed   = Byte & 0x1f;
 					if (Byte & 0x40)
 						PPU.FixedColourGreen = Byte & 0x1f;
 					if (Byte & 0x20)
-						PPU.FixedColourRed   = Byte & 0x1f;
+						PPU.FixedColourBlue   = Byte & 0x1f;
 
 					/* Rebuild packed RGB565 fixed colour eagerly. Used to
 					 * happen once per S9xUpdateScreen flush; doing it here
