@@ -2455,71 +2455,64 @@ static void hires_blend_frame(uint16_t *screen, int width, int height, int pitch
 
 void S9xDeinitUpdate(int width, int height)
 {
-    if (!IPPU.RenderThisFrame)
-        video_cb(NULL, width, height, GFX.Pitch);
-    else if (snes_ntsc_filter)
-    {
-        /* Both blitters (lores and hires) produce the same number of
-           NTSC output pixels per scanline - the hires variant just
-           consumes input pixels at twice the rate per output chunk.
-           For a 256-wide lores frame and a 512-wide hires frame the
-           output is identical at SNES_NTSC_OUT_WIDTH(256) = 602
-           pixels. SNES_NTSC_OUT_WIDTH() is documented in
-           filter/snes_ntsc.h as the LOW-RES output width formula and
-           gives the wrong (1197) answer when applied to hires width
-           - using that as the video_cb width would tell the frontend
-           to display a 1197-wide frame whose rightmost ~595 pixels
-           were never written. */
-        unsigned ntsc_out_width = SNES_NTSC_OUT_WIDTH(SNES_WIDTH);
-        size_t   ntsc_out_pitch = (size_t)ntsc_out_width * sizeof(uint16_t);
-        /* Tie the chroma burst phase to the emulated frame counter so
-           the NTSC output is reproducible across retro_init/_deinit
-           cycles and is unaffected by libretro frameskip (a skipped
-           frame doesn't visit this branch but still bumps ICPU.Frame
-           in cpuexec.c, so the phase advances either way). */
-        int burst_phase = (int)(ICPU.Frame % 3);
+	if (!IPPU.RenderThisFrame)
+		video_cb(NULL, width, height, GFX.Pitch);
+	else if (snes_ntsc_filter)
+	{
+		/* Both blitters (lores and hires) produce the same number of
+		   NTSC output pixels per scanline - the hires variant just
+		   consumes input pixels at twice the rate per output chunk.
+		   For a 256-wide lores frame and a 512-wide hires frame the
+		   output is identical at SNES_NTSC_OUT_WIDTH(256) = 602
+		   pixels. SNES_NTSC_OUT_WIDTH() is documented in
+		   filter/snes_ntsc.h as the LOW-RES output width formula and
+		   gives the wrong (1197) answer when applied to hires width
+		   - using that as the video_cb width would tell the frontend
+		   to display a 1197-wide frame whose rightmost ~595 pixels
+		   were never written. */
+		unsigned ntsc_out_width = SNES_NTSC_OUT_WIDTH(SNES_WIDTH);
+		size_t   ntsc_out_pitch = (size_t)ntsc_out_width * sizeof(uint16_t);
+		/* Tie the chroma burst phase to the emulated frame counter so
+		   the NTSC output is reproducible across retro_init/_deinit
+		   cycles and is unaffected by libretro frameskip (a skipped
+		   frame doesn't visit this branch but still bumps ICPU.Frame
+		   in cpuexec.c, so the phase advances either way). */
+		int burst_phase = (int)(ICPU.Frame % 3);
 
-        if (width > 512)
-        {
-            /* HD Mode 7 4x frame. The filter's output tops out at
-               SNES_NTSC_OUT_WIDTH(256) = 602 px, so input columns
-               beyond 512 add no information -- and the lores blitter,
-               fed 1024-px rows, would write ~2400 px per line into the
-               602-px-pitch buffer (garbage plus overflow within the
-               allocation). Box-downsample each row 2:1 in place
-               (per-channel floor average via the LSB-exact halving-add
-               identity, as in S9xMode7VertResample) and take the hires
-               path; 4x sub-pixel detail survives as anti-aliasing.
-               In-place is safe: x ascends, reads at 2x/2x+1 stay ahead
-               of the write at x. */
-            int y, x;
-            for (y = 0; y < height; y++)
-            {
-                uint16_t *row = GFX.Screen + (size_t) y * (GFX.Pitch >> 1);
-                for (x = 0; x < 512; x++)
-                {
-                    uint16_t a = row[2 * x];
-                    uint16_t b = row[2 * x + 1];
-                    row[x] = (uint16_t) (((a & 0xF7DE) >> 1) + ((b & 0xF7DE) >> 1) + (a & b & 0x0821));
-                }
-            }
-            width = 512;
-        }
+		if (width > 512)
+		{
+			/* HD Mode 7 4x frame. The filter's output tops out at
+			   SNES_NTSC_OUT_WIDTH(256) = 602 px, so input columns
+			   beyond 512 add no information -- and the lores blitter,
+			   fed 1024-px rows, would write ~2400 px per line into the
+			   602-px-pitch buffer (garbage plus overflow within the
+			   allocation). Box-downsample each row 2:1 in place
+			   (per-channel floor average via the LSB-exact halving-add
+			   identity, as in S9xMode7VertResample) and take the hires
+			   path; 4x sub-pixel detail survives as anti-aliasing.
+			   In-place is safe: x ascends, reads at 2x/2x+1 stay ahead
+			   of the write at x. */
+			int y, x;
+			for (y = 0; y < height; y++)
+			{
+				uint16_t *row = GFX.Screen + (size_t) y * (GFX.Pitch >> 1);
+				for (x = 0; x < 512; x++)
+				{
+					uint16_t a = row[2 * x];
+					uint16_t b = row[2 * x + 1];
+					row[x] = (uint16_t) (((a & 0xF7DE) >> 1) + ((b & 0xF7DE) >> 1) + (a & b & 0x0821));
+				}
+			}
+			width = 512;
+		}
 
-        if (width == 512)
-            snes_ntsc_blit_hires(&snes_ntsc, GFX.Screen, GFX.Pitch / 2, burst_phase, width, height, ntsc_screen_buffer, (long)ntsc_out_pitch);
-        else
-            snes_ntsc_blit(&snes_ntsc, GFX.Screen, GFX.Pitch / 2, burst_phase, width, height, ntsc_screen_buffer, (long)ntsc_out_pitch);
-        
-        uint16_t *pixels = (uint16_t *)ntsc_screen_buffer;
-        int total = ntsc_out_width * height;
-        for (int i = 0; i < total; i++) {
-            uint16_t p = pixels[i];
-            pixels[i] = (p & 0x8000) | ((p & 0x001F) << 10) | (p & 0x03E0) | ((p & 0x7C00) >> 10);
-        }
-        
-        video_cb(ntsc_screen_buffer, ntsc_out_width, height, ntsc_out_pitch);
-    }
+		if (width == 512)
+			snes_ntsc_blit_hires(&snes_ntsc, GFX.Screen, GFX.Pitch / 2, burst_phase, width, height, ntsc_screen_buffer, (long)ntsc_out_pitch);
+		else
+			snes_ntsc_blit(&snes_ntsc, GFX.Screen, GFX.Pitch / 2, burst_phase, width, height, ntsc_screen_buffer, (long)ntsc_out_pitch);
+
+		video_cb(ntsc_screen_buffer, ntsc_out_width, height, ntsc_out_pitch);
+	}
 	else if (S9xHdPackActive())
 	{
 		int hd_w, hd_h, hd_pitch;
@@ -2568,20 +2561,25 @@ void S9xDeinitUpdate(int width, int height)
 		}
 
 		if (sw_fb_active)
-		{
-			/* Renderer wrote directly into the frontend's buffer; just
-			   present it. video_cb gets exactly the (data, width,
-			   height, pitch) values returned by the env call. No copy. */
-			video_cb(sw_fb_data, sw_fb_width, sw_fb_height, sw_fb_pitch);
-		}
-		else
-		{
-			/* Either sw_fb is unsupported, or this frame's acquire
-			   was skipped/aborted. Hand GFX.Screen to the frontend;
-			   the frontend's own copy into its swapchain is
-			   unavoidable on this path. */
-			video_cb(GFX.Screen, width, height, GFX.Pitch);
-		}
+        {
+            uint16_t *pixels = (uint16_t *)sw_fb_data;
+            int total = sw_fb_width * sw_fb_height;
+            for (int i = 0; i < total; i++) {
+                uint16_t p = pixels[i];
+                pixels[i] = (p & 0x8000) | ((p & 0x001F) << 10) | (p & 0x03E0) | ((p & 0x7C00) >> 10);
+            }
+            video_cb(sw_fb_data, sw_fb_width, sw_fb_height, sw_fb_pitch);
+        }
+        else
+        {
+            uint16_t *pixels = (uint16_t *)GFX.Screen;
+            int total = (GFX.Pitch / sizeof(uint16_t)) * height;
+            for (int i = 0; i < total; i++) {
+                uint16_t p = pixels[i];
+                pixels[i] = (p & 0x8000) | ((p & 0x001F) << 10) | (p & 0x03E0) | ((p & 0x7C00) >> 10);
+            }
+            video_cb(GFX.Screen, width, height, GFX.Pitch);
+        }
 	}
 }
 
