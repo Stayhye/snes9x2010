@@ -2566,7 +2566,7 @@ void S9xDeinitUpdate(int width, int height)
             int total = sw_fb_width * sw_fb_height;
             for (int i = 0; i < total; i++) {
                 uint16_t p = pixels[i];
-                pixels[i] = (p & 0x8000) | ((p & 0x001F) << 10) | (p & 0x03E0) | ((p & 0x7C00) >> 10);
+                pixels[i] = ((p & 0x001F) << 11) | (p & 0x07E0) | ((p & 0xF800) >> 11);
             }
             video_cb(sw_fb_data, sw_fb_width, sw_fb_height, sw_fb_pitch);
         }
@@ -2576,7 +2576,7 @@ void S9xDeinitUpdate(int width, int height)
             int total = (GFX.Pitch / sizeof(uint16_t)) * height;
             for (int i = 0; i < total; i++) {
                 uint16_t p = pixels[i];
-                pixels[i] = (p & 0x8000) | ((p & 0x001F) << 10) | (p & 0x03E0) | ((p & 0x7C00) >> 10);
+                pixels[i] = ((p & 0x001F) << 11) | (p & 0x07E0) | ((p & 0xF800) >> 11);
             }
             video_cb(GFX.Screen, width, height, GFX.Pitch);
         }
