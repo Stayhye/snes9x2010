@@ -2472,9 +2472,7 @@ static inline void s9x_ps2_fix_colors(uint16_t *pixels, int width, int height, i
         for (int x = 0; x < width; x++)
         {
             uint16_t p = row[x];
-            // 1. Swap 16-bit word endianness (byteswap)
-            p = (p >> 8) | (p << 8);
-            // 2. Swap Red and Blue channels while preserving the 6-bit Green channel
+            // Pure Red and Blue channel swap, preserving 6-bit green
             row[x] = ((p & 0x001F) << 11) | (p & 0x07E0) | ((p & 0xF800) >> 11);
         }
     }
