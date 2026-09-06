@@ -2510,7 +2510,14 @@ void S9xDeinitUpdate(int width, int height)
 			snes_ntsc_blit_hires(&snes_ntsc, GFX.Screen, GFX.Pitch / 2, burst_phase, width, height, ntsc_screen_buffer, (long)ntsc_out_pitch);
 		else
 			snes_ntsc_blit(&snes_ntsc, GFX.Screen, GFX.Pitch / 2, burst_phase, width, height, ntsc_screen_buffer, (long)ntsc_out_pitch);
-
+		
+			uint16_t *pixels = (uint16_t *)GFX.Screen;
+			int total = (GFX.Pitch / sizeof(uint16_t)) * height;
+			for (int i = 0; i < total; i++) {
+			uint16_t p = pixels[i];
+			pixels[i] = (p & 0x8000) | ((p & 0x001F) << 10) | (p & 0x03E0) | ((p & 0x7C00) >> 10);
+		}
+		
 		video_cb(ntsc_screen_buffer, ntsc_out_width, height, ntsc_out_pitch);
 	}
 	else if (S9xHdPackActive())
