@@ -236,16 +236,17 @@ void linearFree(void* mem);
 #include <stdlib.h>
 #include <errno.h>
 
+// Explicitly declare memalign if missing from standard headers on PS2/newlib
+extern void *memalign(size_t boundary, size_t size);
+
 int posix_memalign(void **memptr, size_t alignment, size_t size)
 {
    if (!memptr)
       return EINVAL;
    
-   // Verify alignment is a power of two and a multiple of sizeof(void *)
    if ((alignment % sizeof(void *) != 0) || (alignment & (alignment - 1)) != 0 || alignment == 0)
       return EINVAL;
 
-   // Handle zero-size allocations gracefully
    if (size == 0)
    {
       *memptr = NULL;
