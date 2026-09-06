@@ -233,6 +233,33 @@ void linearFree(void* mem);
 #define VIDEO_REFRESH_RATE_PAL  (PAL_MASTER_CLOCK / (SNES_CYCLES_PER_SCANLINE * SNES_MAX_PAL_VCOUNTER))
 #define VIDEO_REFRESH_RATE_NTSC (NTSC_MASTER_CLOCK / (SNES_CYCLES_PER_SCANLINE * SNES_MAX_NTSC_VCOUNTER))
 
+#include <stdlib.h>
+#include <errno.h>
+
+int posix_memalign(void **memptr, size_t alignment, size_t size)
+{
+   if (!memptr)
+      return EINVAL;
+   
+   // Verify alignment is a power of two and a multiple of sizeof(void *)
+   if ((alignment % sizeof(void *) != 0) || (alignment & (alignment - 1)) != 0 || alignment == 0)
+      return EINVAL;
+
+   // Handle zero-size allocations gracefully
+   if (size == 0)
+   {
+      *memptr = NULL;
+      return 0;
+   }
+
+   void *ptr = memalign(alignment, size);
+   if (!ptr)
+      return ENOMEM;
+
+   *memptr = ptr;
+   return 0;
+}
+
 /* Backing buffer for the in-memory STREAM abstraction (see snes9x.h).
  * Upstream libretro-common dropped memstream_set_buffer/get_last_size and
  * now requires the buffer at memstream_open() time, so we publish it here
