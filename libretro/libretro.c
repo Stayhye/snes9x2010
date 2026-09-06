@@ -1391,110 +1391,121 @@ static void set_system_specs(void)
 
 void retro_init(void)
 {
-    struct retro_log_callback log;
-    struct retro_variable var;
-    enum retro_pixel_format pix_fmt;
-    bool achievements = true;
+	struct retro_log_callback log;
+	struct retro_variable var;
+	enum retro_pixel_format rgb565;
+	bool achievements = true;
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log))
-        log_cb = log.log;
-    else
-        log_cb = NULL;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log))
+		log_cb = log.log;
+	else
+		log_cb = NULL;
 
-    /* State that the core supports achievements. */
-    environ_cb(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS, &achievements);
+	/* State that the core supports achievements. */
+	environ_cb(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS, &achievements);
 
-    /* Request XRGB1555 instead of RGB565 to align channel expectations with the PS2 frontend blitter */
-    pix_fmt = RETRO_PIXEL_FORMAT_XRGB1555;
-    if (environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &pix_fmt))
-        S9xMessage(S9X_MSG_INFO, S9X_CATEGORY_EXTERNAL, "Frontend supports XRGB1555.");
-    else
-    {
-        pix_fmt = RETRO_PIXEL_FORMAT_RGB565;
-        environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &pix_fmt);
-    }
+	rgb565 = RETRO_PIXEL_FORMAT_RGB565;
+	if (environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &rgb565))
+		S9xMessage(S9X_MSG_INFO, S9X_CATEGORY_EXTERNAL, "Frontend supports RGB565 - will use that instead of XRGB1555.");
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_INPUT_BITMASKS, NULL))
-        libretro_supports_bitmasks = true;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_INPUT_BITMASKS, NULL))
+		libretro_supports_bitmasks = true;
 
-    memset(&input_vars, 0, sizeof(input_vars));
-    memset(&Settings, 0, sizeof(Settings));
+	memset(&input_vars, 0, sizeof(input_vars));
+	memset(&Settings, 0, sizeof(Settings));
 
-    Settings.SpeedhackGameID = SPEEDHACK_NONE;
-    Settings.FrameTimePAL = 20000;
-    Settings.FrameTimeNTSC = 16667;
-    Settings.HDMATimingHack = 100;
-    Settings.CartAName[0] = 0;
-    Settings.CartBName[0] = 0;
-    Settings.Crosshair = 1;
-    Settings.BlockInvalidVRAMAccessMaster = TRUE;
+	Settings.SpeedhackGameID = SPEEDHACK_NONE;
+	Settings.FrameTimePAL = 20000;
+	Settings.FrameTimeNTSC = 16667;
+	Settings.HDMATimingHack = 100;
+	Settings.CartAName[0] = 0;
+	Settings.CartBName[0] = 0;
+	Settings.Crosshair = 1;
+	Settings.BlockInvalidVRAMAccessMaster = TRUE;
 
-    var.key = "snes9x_2010_block_invalid_vram_access";
-    var.value = NULL;
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-        Settings.BlockInvalidVRAMAccessMaster = (strcmp(var.value, "disabled") == 0) ? FALSE : TRUE;
+	var.key = "snes9x_2010_block_invalid_vram_access";
+	var.value = NULL;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+		Settings.BlockInvalidVRAMAccessMaster = (strcmp(var.value, "disabled") == 0) ? FALSE : TRUE;
 
-    CPU.Flags = 0;
+	CPU.Flags = 0;
 
-    if (!Init() || !S9xInitAPU())
-    {
-        Deinit();
-        S9xMessage(S9X_MSG_ERROR, S9X_CATEGORY_EXTERNAL, "Failed to init Memory or APU.");
-        exit(1);
-    }
+	if (!Init() || !S9xInitAPU())
+	{
+		Deinit();
+		S9xMessage(S9X_MSG_ERROR, S9X_CATEGORY_EXTERNAL, "Failed to init Memory or APU.");
+		exit(1);
+	}
 
-    S9xInitSound();
+	S9xInitSound();
 
-    GFX.Pitch = MAX_BUFFER_WIDTH * sizeof(uint16_t);
+	GFX.Pitch = MAX_BUFFER_WIDTH * sizeof(uint16_t);
 
+	/* Defensive teardown: if retro_init is re-entered without an
+	   intervening retro_deinit (statically linked frontends, console
+	   re-init paths), the screen allocations below would orphan the
+	   prior buffers. Free via the canonical owned_* handles so we
+	   release the original allocations even if a sw_fb redirect had
+	   rewritten GFX.Screen to the frontend's swapchain. */
 #if defined(_3DS)
-    if (owned_screen_buffer)
-        linearFree(owned_screen_buffer);
-    if (owned_ntsc_buffer)
-        linearFree(owned_ntsc_buffer);
+	if (owned_screen_buffer)
+		linearFree(owned_screen_buffer);
+	if (owned_ntsc_buffer)
+		linearFree(owned_ntsc_buffer);
 #else
-    if (owned_screen_buffer)
-        free(owned_screen_buffer);
-    if (owned_ntsc_buffer)
-        free(owned_ntsc_buffer);
+	if (owned_screen_buffer)
+		free(owned_screen_buffer);
+	if (owned_ntsc_buffer)
+		free(owned_ntsc_buffer);
 #endif
-    owned_screen_buffer = NULL;
-    owned_ntsc_buffer   = NULL;
-    GFX.Screen          = NULL;
-    ntsc_screen_buffer  = NULL;
+	owned_screen_buffer = NULL;
+	owned_ntsc_buffer   = NULL;
+	GFX.Screen          = NULL;
+	ntsc_screen_buffer  = NULL;
 
 #if defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE >= 200112L) && !defined(GEKKO) && !defined(_3DS) && !defined(__SWITCH__) && !defined(VITA)
-    {
-        void *tmp_screen = NULL;
-        void *tmp_ntsc   = NULL;
-        if (posix_memalign(&tmp_screen, 16, GFX.Pitch * 512) != 0)
-            tmp_screen = NULL;
-        if (posix_memalign(&tmp_ntsc, 16, GFX.Pitch * MAX_SNES_HEIGHT) != 0)
-            tmp_ntsc = NULL;
-        GFX.Screen         = (uint16_t *)tmp_screen;
-        ntsc_screen_buffer = (uint16_t *)tmp_ntsc;
-    }
+	/* GFX.Pitch is already in bytes (= MAX_BUFFER_WIDTH * sizeof(uint16_t));
+	   buffer size is Pitch * lines, not Pitch * lines * sizeof(uint16_t) again.
+	   request 128-bit alignment here if possible.
+	   posix_memalign output goes through void* temporaries to avoid the
+	   strict-aliasing violation that '(void**)&GFX.Screen' would create. */
+	{
+		void *tmp_screen = NULL;
+		void *tmp_ntsc   = NULL;
+		if (posix_memalign(&tmp_screen, 16, GFX.Pitch * 512) != 0)
+			tmp_screen = NULL;
+		if (posix_memalign(&tmp_ntsc, 16, GFX.Pitch * MAX_SNES_HEIGHT) != 0)
+			tmp_ntsc = NULL;
+		GFX.Screen         = (uint16_t *)tmp_screen;
+		ntsc_screen_buffer = (uint16_t *)tmp_ntsc;
+	}
 #elif defined(_3DS)
-    GFX.Screen = (uint16_t*) linearMemAlign(GFX.Pitch * 512, 0x80);
-    ntsc_screen_buffer = (uint16_t*)linearMemAlign(GFX.Pitch * MAX_SNES_HEIGHT, 0x80);
+	GFX.Screen = (uint16_t*) linearMemAlign(GFX.Pitch * 512, 0x80);
+	ntsc_screen_buffer = (uint16_t*)linearMemAlign(GFX.Pitch * MAX_SNES_HEIGHT, 0x80);
 #else
-    GFX.Screen = (uint16_t*) calloc(1, GFX.Pitch * 512);
-    ntsc_screen_buffer = (uint16_t *)calloc(1, GFX.Pitch * MAX_SNES_HEIGHT);
+	GFX.Screen = (uint16_t*) calloc(1, GFX.Pitch * 512);
+	ntsc_screen_buffer = (uint16_t *)calloc(1, GFX.Pitch * MAX_SNES_HEIGHT);
 #endif
-    if ((!GFX.Screen || !ntsc_screen_buffer) && log_cb)
-        log_cb(RETRO_LOG_ERROR, "Failed to allocate screen buffers.\n");
+	if ((!GFX.Screen || !ntsc_screen_buffer) && log_cb)
+		log_cb(RETRO_LOG_ERROR, "Failed to allocate screen buffers.\n");
 
-    owned_screen_buffer = GFX.Screen;
-    owned_ntsc_buffer   = ntsc_screen_buffer;
-    S9xGraphicsInit();
+	/* Stash the canonical pointers so retro_deinit always frees what we
+	   allocated, even if the sw_fb redirect leaves GFX.Screen pointing
+	   at the frontend's swapchain at teardown time. */
+	owned_screen_buffer = GFX.Screen;
+	owned_ntsc_buffer   = ntsc_screen_buffer;
+	S9xGraphicsInit();
 
-    retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
-    retro_set_controller_port_device(1, RETRO_DEVICE_JOYPAD);
+	retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
+	retro_set_controller_port_device(1, RETRO_DEVICE_JOYPAD);
 
-    S9xUnmapAllControls();
-    map_buttons();
+	S9xUnmapAllControls();
+	map_buttons();
 
-    Settings.SuperFXSpeedPerLine = 4378500;
+	/* Initialize SuperFX CPU to normal speed by default.
+	 * 0.417 * 10.5e6 == 4378500 exactly; kept as an integer so the
+	 * GSU instruction budget stays FPU-free and deterministic. */
+	Settings.SuperFXSpeedPerLine = 4378500;
 }
 
 /* libretro uses relative values for analogue devices. 
