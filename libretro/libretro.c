@@ -1837,88 +1837,105 @@ static void sw_fb_release_after_frame(void)
 
 void retro_run(void)
 {
-	int result = -1;
-	bool okay = false;
-	bool updated = false;
+    int result = -1;
+    bool okay = false;
+    bool updated = false;
 
-	S9xHdPackFrameBegin();
+    S9xHdPackFrameBegin();
 
-	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
-	{
-		check_variables(false);
-		update_geometry();
-	}
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
+    {
+        check_variables(false);
+        update_geometry();
+    }
 
-	okay = (environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &result));
-	if (okay)
-	{
-		bool videoEnabled = 0 != (result & 0x01);
-		bool hardDisableAudio = 0 != (result & 0x08);
-		IPPU.RenderThisFrame = videoEnabled;
+    okay = (environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &result));
+    if (okay)
+    {
+        bool videoEnabled = 0 != (result & 0x01);
+        bool hardDisableAudio = 0 != (result & 0x08);
+        IPPU.RenderThisFrame = videoEnabled;
 
-		/* RETRO_AV_ENABLE_AUDIO (0x02) is intentionally ignored: it says the
-		   frontend will throw these samples away, not that the core may stop
-		   producing them. See audio_hard_disabled. */
-		audio_hard_disabled = hardDisableAudio;
-		Settings.HardDisableAudio = hardDisableAudio;
-	}
-	else
-	{
-		IPPU.RenderThisFrame = true;
-		audio_hard_disabled = false;
-		Settings.HardDisableAudio = false;
-	}
+        /* RETRO_AV_ENABLE_AUDIO (0x02) is intentionally ignored: it says the
+           frontend will throw these samples away, not that the core may stop
+           producing them. See audio_hard_disabled. */
+        audio_hard_disabled = hardDisableAudio;
+        Settings.HardDisableAudio = hardDisableAudio;
+    }
+    else
+    {
+        IPPU.RenderThisFrame = true;
+        audio_hard_disabled = false;
+        Settings.HardDisableAudio = false;
+    }
 
-	if ((frameskip_type > 0) &&
-	    retro_audio_buff_active &&
-	    IPPU.RenderThisFrame)
-	{
-		bool skip_frame;
-		switch (frameskip_type)
-		{
-			case 1: /* auto */
-				skip_frame = retro_audio_buff_underrun;
-				break;
-			case 2: /* manual */
-				skip_frame = (retro_audio_buff_occupancy < frameskip_threshold);
-				break;
-			default:
-				skip_frame = false;
-				break;
-		}
+    if ((frameskip_type > 0) &&
+        retro_audio_buff_active &&
+        IPPU.RenderThisFrame)
+    {
+        bool skip_frame;
+        switch (frameskip_type)
+        {
+            case 1: /* auto */
+                skip_frame = retro_audio_buff_underrun;
+                break;
+            case 2: /* manual */
+                skip_frame = (retro_audio_buff_occupancy < frameskip_threshold);
+                break;
+            default:
+                skip_frame = false;
+                break;
+        }
 
-		if (skip_frame)
-		{
-			if (frameskip_counter < FRAMESKIP_MAX)
-			{
-				IPPU.RenderThisFrame = false;
-				frameskip_counter++;
-			}
-			else
-				frameskip_counter = 0;
-		}
-	}
-	else
-		frameskip_counter = 0;
+        if (skip_frame)
+        {
+            if (frameskip_counter < FRAMESKIP_MAX)
+            {
+                IPPU.RenderThisFrame = false;
+                frameskip_counter++;
+            }
+            else
+                frameskip_counter = 0;
+        }
+    }
+    else
+        frameskip_counter = 0;
 
-	/* If frameskip/timing settings have changed,
-	 * update frontend audio latency
-	 * > Can do this before or after the frameskip
-	 *   check, but doing it after means we at least
-	 *   retain the current frame's audio output */
-	if (update_audio_latency)
-	{
-		environ_cb(RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY, &retro_audio_latency);
-		update_audio_latency = false;
-  }
+    /* If frameskip/timing settings have changed,
+     * update frontend audio latency
+     * > Can do this before or after the frameskip
+     *   check, but doing it after means we at least
+     *   retain the current frame's audio output */
+    if (update_audio_latency)
+    {
+        environ_cb(RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY, &retro_audio_latency);
+        update_audio_latency = false;
+    }
 
-	poll_cb();
-	report_buttons();
+    poll_cb();
+    report_buttons();
 
-	S9xMainLoop();
-	sw_fb_release_after_frame();
+    S9xMainLoop();
 
-	audio_upload_samples();
+    // Universal Red/Blue color correction for PS2 RGB565 output
+    if (IPPU.RenderThisFrame && GFX.Screen)
+    {
+        int width = IPPU.RenderedWidth;
+        int height = IPPU.RenderedHeight;
+        for (int y = 0; y < height; y++)
+        {
+            uint16_t *row = (uint16_t *)(GFX.Screen + (y * GFX.Pitch));
+            for (int x = 0; x < width; x++)
+            {
+                uint16_t p = row[x];
+                row[x] = ((p & 0x001F) << 11) | (p & 0x07E0) | ((p & 0xF800) >> 11);
+            }
+        }
+    }
+
+    sw_fb_release_after_frame();
+
+    audio_upload_samples();
 }
 
 /* Decide whether this (de)serialisation may take the fast in-place path.
