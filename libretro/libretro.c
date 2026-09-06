@@ -2472,8 +2472,9 @@ static inline void s9x_ps2_fix_colors(uint16_t *pixels, int width, int height, i
         for (int x = 0; x < width; x++)
         {
             uint16_t p = row[x];
-            // Alternative mask arrangement if red/blue inversion is offset
-            row[x] = ((p & 0x1F00) >> 5) | (p & 0x07E0) | ((p & 0x001F) << 11) | (p & 0x8000);
+            // Extract Blue (bits 0-4), keep Green intact (bits 5-10), extract Red (bits 11-15)
+            // and reconstruct as BGR565 (or vice-versa to correct the channel mismatch)
+            row[x] = ((p & 0x001F) << 11) | (p & 0x07E0) | ((p & 0xF800) >> 11);
         }
     }
 }
