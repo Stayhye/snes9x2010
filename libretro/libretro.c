@@ -2472,8 +2472,11 @@ static inline void s9x_ps2_fix_colors(uint16_t *pixels, int width, int height, i
         for (int x = 0; x < width; x++)
         {
             uint16_t p = row[x];
-            // 1555 layout swap: Red (10-14), Green (5-9), Blue (0-4)
-            row[x] = (p & 0x8000) | ((p & 0x001F) << 10) | (p & 0x03E0) | ((p & 0x7C00) >> 10);
+            // Convert RGB565 (R:11-15, G:5-10, B:0-4) to ABGR1555 (A:15, B:10-14, G:5-9, R:0-4)
+            uint16_t r = (p & 0xF800) >> 11;
+            uint16_t g = ((p & 0x07E0) >> 1) & 0x03E0;
+            uint16_t b = (p & 0x001F) << 10;
+            row[x] = 0x8000 | b | g | r; // 0x8000 sets opaque alpha bit
         }
     }
 }
