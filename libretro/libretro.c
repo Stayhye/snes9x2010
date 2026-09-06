@@ -1920,8 +1920,8 @@ void retro_run(void)
     // Universal Red/Blue color correction for PS2 RGB565 output
     if (IPPU.RenderThisFrame && GFX.Screen)
     {
-        int width = IPPU.RenderedWidth;
-        int height = IPPU.RenderedHeight;
+        int width = IPPU.RenderedScreenWidth;
+        int height = IPPU.RenderedScreenHeight;
         for (int y = 0; y < height; y++)
         {
             uint16_t *row = (uint16_t *)(GFX.Screen + (y * GFX.Pitch));
